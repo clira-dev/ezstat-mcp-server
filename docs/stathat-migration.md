@@ -55,7 +55,7 @@ because StatHat's API is offline — the export you already downloaded is the so
   and query metrics themselves.
 - **Flat pricing** — $19 / $49 / $149 per month by tracked stats, every currency shown
   up front. A card-gated free tier exists to see your data live before paying anything.
-- **No lock-in** — CSV + JSON export any time; alerts / weekly digest / anomaly detection
+- **No lock-in** — CSV + JSON export any time; anomaly detection and correlations are live; alerts / weekly digest
   are on the roadmap and marked coming-soon until they actually ship.
 
 ## The migrator deal

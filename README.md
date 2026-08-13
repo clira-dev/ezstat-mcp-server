@@ -86,7 +86,7 @@ metrics, with every number verified against the retrieved data before it reaches
 
 Flat monthly pricing by tracked stats — **$19 / $49 / $149** — plus a card-gated free tier
 (no charge; see your data live before paying). Your data is yours: export any time, cancel
-any time. Features that are not shipped yet (alerts, weekly digest, anomaly detection) are
+any time. Anomaly detection and metric correlations are live. Features that are not shipped yet (alerts, weekly digest) are
 marked *coming soon* on the site rather than sold — what you see live is what works.
 
 ### Coming from StatHat?
