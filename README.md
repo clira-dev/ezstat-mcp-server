@@ -76,6 +76,46 @@ npx -y @smithery/cli install ezstat-mcp-server --client claude
 
 Or visit <https://smithery.ai/server/ezstat-mcp-server> and click **Install**.
 
+## About EzStat
+
+[EzStat](https://ezstat.dev) is a dead-simple hosted metrics service: **one HTTP POST in,
+a live chart out**. No SDK, no collector daemon, no YAML, no dashboard builder. Counters
+and value/gauge stats auto-create on first POST; charts, share/embed, and CSV/JSON export
+are built in, and **Ask-Your-Data** (live) answers plain-English questions from your own
+metrics, with every number verified against the retrieved data before it reaches you.
+
+Flat monthly pricing by tracked stats — **$19 / $49 / $149** — plus a card-gated free tier
+(no charge; see your data live before paying). Your data is yours: export any time, cancel
+any time. Features that are not shipped yet (alerts, weekly digest, anomaly detection) are
+marked *coming soon* on the site rather than sold — what you see live is what works.
+
+### Coming from StatHat?
+
+If your `api.stathat.com` calls stopped and your dashboards went dark: EzStat speaks
+**StatHat's wire format** — the same `/ez`, `/c`, `/v` endpoints, same params, same
+response. The migration is usually one line:
+
+```bash
+# before
+curl -X POST https://api.stathat.com/ez -d "stat=messages sent" -d "ezkey=KEY" -d "count=1"
+# after — change the host, use your EzStat key; stats auto-create
+curl -X POST https://api.ezstat.dev/ez -d "stat=messages sent" -d "ezkey=EZSTAT_KEY" -d "count=1"
+```
+
+Most StatHat client libraries take a base-URL override in one line. Saved a StatHat
+CSV/JSON export? The importer recreates your stats and backfills history (8 MB / 500k
+points per file). Full guide: [docs/stathat-migration.md](docs/stathat-migration.md) ·
+[ezstat.dev/migrate/stathat](https://ezstat.dev/migrate/stathat) — including the migrator
+deal: free tier to see it live first, a 12-month price-lock, and white-glove import for
+the first 25 migrations.
+
+### Why agent-native metrics
+
+Your coding agent deploys, tests, and ships — it should also be the one tracking and
+reading the numbers. That's this server: metrics your agents write and read themselves.
+The reasoning: [docs/agent-native-metrics.md](docs/agent-native-metrics.md) · comparison
+with StatHat/StatFlow/Datadog: [ezstat.dev/vs](https://ezstat.dev/vs).
+
 ## Environment variables
 
 | Variable               | Required | Default                       | Notes                                                          |
