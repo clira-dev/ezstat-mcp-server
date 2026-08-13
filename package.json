@@ -1,0 +1,61 @@
+{
+  "name": "ezstat-mcp-server",
+  "version": "0.6.0",
+  "description": "Model Context Protocol server for EzStat — let AI agents push and read your metrics natively.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ezstat-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "smithery.yaml",
+    ".env.example"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ezstat",
+    "metrics",
+    "ai-agent",
+    "claude",
+    "cursor"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.13.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "typescript": "^5.6.2",
+    "tsx": "^4.19.1",
+    "vitest": "^2.1.1"
+  },
+  "mcp": {
+    "name": "ezstat",
+    "displayName": "EzStat",
+    "description": "Push and read metrics with EzStat from any AI agent. Track counters and values, then ask natural-language questions over your production telemetry.",
+    "homepage": "https://ezstat.dev",
+    "version": "0.6.0",
+    "transport": "stdio",
+    "tools": [
+      "track_metric",
+      "ask_ezstat",
+      "read_stat",
+      "list_stats"
+    ]
+  }
+}

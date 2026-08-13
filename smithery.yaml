@@ -1,0 +1,28 @@
+# Smithery registry manifest for the EzStat MCP server.
+# See https://smithery.ai/docs/build/smithery-yaml
+#
+# This file tells Smithery what the server needs at install time and how to run it.
+# The key secret is `ezkey` (your EzStat API key, from https://ezstat.dev).
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - ezkey
+    properties:
+      ezkey:
+        type: string
+        description: Your EzStat API key (the ezkey). Generate one at https://ezstat.dev.
+      baseUrl:
+        type: string
+        description: EzStat API base URL. Defaults to https://api.ezstat.dev — override for staging or self-hosted deployments.
+        default: https://api.ezstat.dev
+  commandFunction: |
+    (config) => ({
+      command: "node",
+      args: ["{{packagePath}}/dist/index.js"],
+      env: {
+        EZSTAT_API_KEY: config.ezkey,
+        EZSTAT_BASE_URL: config.baseUrl || "https://api.ezstat.dev",
+      },
+    })

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ezstat": {
+      "command": "npx",
+      "args": ["-y", "ezstat-mcp-server"],
+      "env": {
+        "EZSTAT_API_KEY": "<your EzStat API key>",
+        "EZSTAT_BASE_URL": "https://ezstat.dev"
+      }
+    }
+  }
+}
