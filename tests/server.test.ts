@@ -33,10 +33,18 @@ describe("MCP server — tools list", () => {
     await client.close();
   });
 
-  it("lists exactly the 4 EzStat tools", async () => {
+  it("lists exactly the 7 EzStat tools", async () => {
     const result = await client.listTools();
     const names = result.tools.map((t) => t.name).sort();
-    expect(names).toEqual(["ask_ezstat", "list_stats", "read_stat", "track_metric"]);
+    expect(names).toEqual([
+      "ask_ezstat",
+      "create_alert",
+      "delete_alert",
+      "list_alerts",
+      "list_stats",
+      "read_stat",
+      "track_metric",
+    ]);
   });
 
   it("every tool has a non-empty description and a typed inputSchema", async () => {

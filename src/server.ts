@@ -98,12 +98,32 @@ export interface BuildServerDeps {
  * Pure factory — does NOT connect any transport. The caller picks the transport
  * (we always use stdio for Claude/Cursor compatibility).
  */
+const createAlertSchema = {
+  stat: z.string().min(1).max(128).describe("Name of the stat to alert on (as shown by list_stats)."),
+  condition_type: z
+    .enum(["above", "below", "pct_change", "heartbeat", "missing_data", "sustained"])
+    .describe("above/below: value crosses threshold. pct_change: % move over window_minutes. heartbeat/missing_data: no data for window_minutes. sustained: above threshold for consecutive evaluations."),
+  threshold: z.number().finite().describe("The boundary value (for heartbeat/missing_data use 0)."),
+  window_minutes: z.number().int().positive().max(10080).optional()
+    .describe("Staleness window for heartbeat/missing_data, lookback for pct_change (minutes)."),
+  webhook_url: z.string().url().max(500)
+    .describe("Public HTTPS receiver for the alert payload (private/internal targets are refused). Email delivery is coming soon — webhook/Slack only for now."),
+  cooldown_minutes: z.number().int().positive().max(10080).optional()
+    .describe("Minimum minutes between repeat fires (default 60)."),
+};
+
+const listAlertsSchema = {};
+
+const deleteAlertSchema = {
+  alert_id: z.string().min(1).describe("Alert id (as shown by list_alerts)."),
+};
+
 export function buildServer(deps: BuildServerDeps): McpServer {
   const { client } = deps;
   const server = new McpServer(
     {
       name: "ezstat",
-      version: "0.6.0",
+      version: "0.7.0",
     },
     {
       instructions:
@@ -111,7 +131,8 @@ export function buildServer(deps: BuildServerDeps): McpServer {
         "Use `track_metric` to record a counter or gauge your code \"produced\". " +
         "Use `list_stats` to see what exists in this account. " +
         "Use `read_stat` for a structured recent-value/series/summary read of one stat. " +
-        "Use `ask_ezstat` for natural-language questions over the account's metrics.",
+        "Use `ask_ezstat` for natural-language questions over the account's metrics. " +
+        "Use `create_alert`/`list_alerts`/`delete_alert` to get a webhook when a metric crosses a threshold, moves too fast, or goes quiet.",
     },
   );
 
@@ -232,6 +253,70 @@ export function buildServer(deps: BuildServerDeps): McpServer {
         return okResult(`${stats.length} stat${stats.length === 1 ? "" : "s"}:\n${lines.join("\n")}`);
       } catch (err) {
         return errorResult(err, "Failed to list stats");
+      }
+    },
+  );
+
+  server.tool(
+    "create_alert",
+    "Create an alert on a stat: webhook fires when the condition is met (above/below threshold, % change, heartbeat/missing data, sustained). Deliveries retry with backoff and carry a stable idempotency_key so receivers can dedup. The stat is referenced by NAME; it must already exist.",
+    createAlertSchema,
+    async (args) => {
+      try {
+        const stats = await client.listStats();
+        const match = stats.find((st) => st.name === args.stat);
+        if (!match || !match.id) {
+          return errorResult(
+            new Error(`No stat named "${args.stat}" in this account. Use list_stats to see what exists.`),
+            "Unknown stat",
+          );
+        }
+        const alert = await client.createAlert({
+          stat_id: match.id,
+          condition_type: args.condition_type,
+          threshold: args.threshold,
+          window_minutes: args.window_minutes,
+          channel: "webhook",
+          channel_config: { webhook_url: args.webhook_url },
+          cooldown_minutes: args.cooldown_minutes,
+        });
+        return okResult(
+          `Alert created (id ${alert.id}): "${args.stat}" ${args.condition_type} ${args.threshold} -> webhook. It is evaluated about every 2 minutes.`,
+        );
+      } catch (err) {
+        return errorResult(err, "Failed to create alert");
+      }
+    },
+  );
+
+  server.tool(
+    "list_alerts",
+    "List the account's alerts: id, stat, condition, channel, enabled, last trigger time.",
+    listAlertsSchema,
+    async () => {
+      try {
+        const alerts = await client.listAlerts();
+        if (alerts.length === 0) return okResult("No alerts configured.");
+        const lines = alerts.map((a) =>
+          `${a.id} | ${a.stat_name ?? a.stat_id ?? "?"} | ${a.condition_type ?? "?"} ${a.threshold ?? ""} | ${a.channel ?? "?"} | ${a.enabled ? "enabled" : "disabled"} | last: ${a.last_triggered_at ?? "never"}`,
+        );
+        return okResult(`Alerts (${alerts.length}):\n${lines.join("\n")}`);
+      } catch (err) {
+        return errorResult(err, "Failed to list alerts");
+      }
+    },
+  );
+
+  server.tool(
+    "delete_alert",
+    "Delete an alert by id (see list_alerts).",
+    deleteAlertSchema,
+    async (args) => {
+      try {
+        await client.deleteAlert(args.alert_id);
+        return okResult(`Alert ${args.alert_id} deleted.`);
+      } catch (err) {
+        return errorResult(err, "Failed to delete alert");
       }
     },
   );

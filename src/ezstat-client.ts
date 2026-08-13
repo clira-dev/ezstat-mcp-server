@@ -234,6 +234,27 @@ export class EzStatClient {
   // HTTP plumbing.
   // ───────────────────────────────────────────────────────────────────────────
 
+  async listAlerts(): Promise<AlertRow[]> {
+    const res = await this.getJson<{ alerts?: AlertRow[] }>("/api/v1/alerts", { bearer: true });
+    return res.alerts ?? [];
+  }
+
+  async createAlert(input: CreateAlertInput): Promise<AlertRow> {
+    const res = await this.postJson<{ alert?: AlertRow }>("/api/v1/alerts", input, { bearer: true });
+    if (!res.alert) {
+      throw new EzStatApiError({ status: 0, code: "bad_response", message: "EzStat did not return the created alert." });
+    }
+    return res.alert;
+  }
+
+  async deleteAlert(id: string): Promise<void> {
+    const url = this.resolveUrl(`/api/v1/alerts/${encodeURIComponent(id)}`);
+    await this.run<unknown>("DELETE", url, {
+      Accept: "application/json",
+      Authorization: `Bearer ${this.config.apiKey}`,
+    }, undefined);
+  }
+
   private async getJson<T>(path: string, opts: { bearer: boolean }): Promise<T> {
     const url = this.resolveUrl(path);
     const headers: Record<string, string> = { Accept: "application/json" };
@@ -461,4 +482,25 @@ function parseServerErrorMessage(text: string): string | null {
   } catch {
     return null;
   }
+}
+
+export interface AlertRow {
+  id: string;
+  stat_id?: string;
+  stat_name?: string | null;
+  condition_type?: string;
+  threshold?: number;
+  channel?: string;
+  enabled?: boolean;
+  last_triggered_at?: string | null;
+}
+
+export interface CreateAlertInput {
+  stat_id: string;
+  condition_type: string;
+  threshold: number;
+  window_minutes?: number;
+  channel: string;
+  channel_config?: { webhook_url?: string; slack_channel?: string };
+  cooldown_minutes?: number;
 }

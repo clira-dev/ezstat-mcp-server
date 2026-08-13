@@ -7,7 +7,7 @@ metrics natively** — no copy-paste, no dashboard hop. This is the product behi
 code can also touch your observability.
 
 The server speaks **stdio** (the standard transport for local agent runners) and exposes
-four focused tools. Each tool description is written for an agent audience so the model
+seven focused tools. Each tool description is written for an agent audience so the model
 knows when to call it.
 
 ## Tools
@@ -18,6 +18,9 @@ knows when to call it.
 | `ask_ezstat`   | Ask a natural-language question about your metrics (the agent-read path).                         |
 | `read_stat`    | Structured read of a stat: latest value + series + summary (count/min/max/avg/sum) for a window.   |
 | `list_stats`   | List the account's metrics (names + types + description).                                         |
+| `create_alert` | Create a webhook alert on a stat (threshold / %-change / heartbeat / sustained).                   |
+| `list_alerts`  | List the account's alerts (id, stat, condition, channel, enabled, last fire).                      |
+| `delete_alert` | Delete an alert by id.                                                                             |
 
 Tool descriptions are tuned for agent reasoning — see `src/server.ts`.
 
@@ -131,7 +134,7 @@ A starter `.env.example` is shipped.
 
 ## How it talks to EzStat
 
-The four tools map to four real EzStat API routes (all auth by EzStat API key):
+The tools map to real EzStat API routes (all auth by EzStat API key):
 
 | Tool           | Method | Path                       | Auth                                  |
 | -------------- | ------ | -------------------------- | ------------------------------------- |
@@ -139,6 +142,9 @@ The four tools map to four real EzStat API routes (all auth by EzStat API key):
 | `ask_ezstat`   | POST   | `/api/v1/query`            | `Authorization: Bearer <ezkey>`       |
 | `read_stat`    | GET    | `/api/v1/stats/:name`      | `Authorization: Bearer <ezkey>`       |
 | `list_stats`   | GET    | `/api/v1/stats`            | `Authorization: Bearer <ezkey>`       |
+| `create_alert` | POST   | `/api/v1/alerts`           | `Authorization: Bearer <ezkey>`       |
+| `list_alerts`  | GET    | `/api/v1/alerts`           | `Authorization: Bearer <ezkey>`       |
+| `delete_alert` | DELETE | `/api/v1/alerts/:id`       | `Authorization: Bearer <ezkey>`       |
 
 - `track_metric` calls the StatHat-compatible EZ ingest (`{"ezkey","stat","count"?,"value"?,"t"?}`).
   Counter semantics: omit both `count` and `value` to record `count=1` (counter +1).

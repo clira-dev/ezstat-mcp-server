@@ -1,6 +1,6 @@
 {
   "name": "ezstat-mcp-server",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Model Context Protocol server for EzStat — let AI agents push and read your metrics natively.",
   "type": "module",
   "main": "dist/index.js",
@@ -52,7 +52,7 @@
     "displayName": "EzStat",
     "description": "Push and read metrics with EzStat from any AI agent. Track counters and values, then ask natural-language questions over your production telemetry.",
     "homepage": "https://ezstat.dev",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "transport": "stdio",
     "tools": [
       "track_metric",
