@@ -28,7 +28,10 @@
     "metrics",
     "ai-agent",
     "claude",
-    "cursor"
+    "cursor",
+    "observability",
+    "stathat",
+    "ai-agents"
   ],
   "license": "MIT",
   "engines": {
@@ -57,5 +60,13 @@
       "read_stat",
       "list_stats"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clira-dev/ezstat-mcp-server.git"
+  },
+  "homepage": "https://ezstat.dev",
+  "bugs": {
+    "url": "https://github.com/clira-dev/ezstat-mcp-server/issues"
   }
 }
