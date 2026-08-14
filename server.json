@@ -6,12 +6,26 @@
     "url": "https://github.com/clira-dev/ezstat-mcp-server",
     "source": "github"
   },
-  "version": "0.7.1",
+  "version": "0.8.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.ezstat.dev",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <your EzStat API key> (get one at https://ezstat.dev)",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",
       "identifier": "ezstat-mcp-server",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "transport": {
         "type": "stdio"
       },

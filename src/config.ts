@@ -43,6 +43,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): EzStatConfig {
       "EZSTAT_API_KEY is not set. Set it to your EzStat API key (the ezkey) from https://ezstat.dev.",
     );
   }
+  return loadConfigForKey(apiKey, env);
+}
+
+/**
+ * Resolve config for an explicitly supplied API key (the hosted HTTP transport's
+ * per-request path: each connection brings ITS OWN key — the process env is used
+ * only for base-URL / timeout / path overrides, never for the key).
+ */
+export function loadConfigForKey(apiKey: string, env: NodeJS.ProcessEnv = process.env): EzStatConfig {
+  const key = apiKey.trim();
+  if (!key) {
+    throw new EzStatConfigError("API key is empty. Supply your EzStat API key (the ezkey) from https://ezstat.dev.");
+  }
 
   const baseUrl = stripTrailingSlash(
     (env.EZSTAT_BASE_URL ?? DEFAULT_BASE_URL).trim() || DEFAULT_BASE_URL,
@@ -52,7 +65,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): EzStatConfig {
   const timeoutMs = timeoutRaw ? Math.max(1_000, parseInt(timeoutRaw, 10) || DEFAULT_TIMEOUT_MS) : DEFAULT_TIMEOUT_MS;
 
   return {
-    apiKey,
+    apiKey: key,
     baseUrl,
     timeoutMs,
     ingestPath: (env.EZSTAT_INGEST_PATH ?? DEFAULT_INGEST_PATH).trim() || DEFAULT_INGEST_PATH,

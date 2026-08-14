@@ -6,9 +6,43 @@ metrics natively** — no copy-paste, no dashboard hop. This is the product behi
 "metrics your agents write and read themselves" positioning: every agent that touches your
 code can also touch your observability.
 
-The server speaks **stdio** (the standard transport for local agent runners) and exposes
+The server speaks **stdio** (the standard transport for local agent runners) and — as a
+hosted endpoint at **`https://mcp.ezstat.dev`** — **streamable HTTP**, exposing the same
 seven focused tools. Each tool description is written for an agent audience so the model
 knows when to call it.
+
+## Hosted endpoint — zero install
+
+Agents can connect to the hosted streamable-HTTP endpoint with nothing but an EzStat API
+key — no npm install, no local process:
+
+```json
+{
+  "mcpServers": {
+    "ezstat": {
+      "type": "http",
+      "url": "https://mcp.ezstat.dev",
+      "headers": {
+        "Authorization": "Bearer ezkey_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+- **Multi-tenant**: every request carries *your* key as `Authorization: Bearer <ezkey>`;
+  the server holds no key of its own and each connection only ever sees its own account.
+- **Discovery is free**: `initialize` and `tools/list` work without a key, so clients and
+  registry inspectors can introspect the tool surface before you configure anything.
+- **Tool calls require the key**: a call without one (or with an invalid one) returns a
+  clean in-band MCP tool error telling the agent what to send — never a hang or a crash.
+- **Stateless**: no sessions are issued or required; each POST is self-contained.
+
+This hosted endpoint also satisfies the requirements for hosted/remote listings on MCP
+registries (e.g. Smithery's hosted-server path) — see `server.json`'s `remotes` entry.
+
+The stdio transport below remains fully supported and is still the right choice when you
+want the server running locally under your own runner.
 
 ## Tools
 
@@ -184,8 +218,8 @@ For Smithery / mcp.so / Glama listings:
 - **Description**: Push and read metrics with EzStat from any AI agent. Track counters and
   values, then ask natural-language questions over your production telemetry.
 - **Homepage**: <https://ezstat.dev>
-- **Version**: `0.6.0`
-- **Transport**: `stdio`
+- **Version**: `0.8.0`
+- **Transport**: `stdio` (local) + `streamable-http` (hosted at `https://mcp.ezstat.dev`)
 - **License**: MIT
 - **Repository**: this package's source
 
