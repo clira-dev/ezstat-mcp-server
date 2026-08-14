@@ -10,21 +10,32 @@
  */
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { loadConfig } from "./config.js";
+import { EzStatConfigError, loadConfig } from "./config.js";
 import { EzStatClient } from "./ezstat-client.js";
 import { buildServer } from "./server.js";
 
+/**
+ * When EZSTAT_API_KEY is not set we still start the server so MCP clients and
+ * registry inspectors can introspect tools; every tool CALL then fails with the
+ * original, clear configuration error instead of the process refusing to boot.
+ */
+function makeUnconfiguredClient(err: EzStatConfigError): EzStatClient {
+  const reject = (): Promise<never> => Promise.reject(err);
+  return new Proxy({} as EzStatClient, { get: () => reject });
+}
+
 async function main(): Promise<void> {
-  let config: ReturnType<typeof loadConfig>;
+  let client: EzStatClient;
   try {
-    config = loadConfig();
+    client = new EzStatClient(loadConfig());
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[ezstat-mcp] ${message}\n`);
-    process.exit(2);
+    if (!(err instanceof EzStatConfigError)) throw err;
+    process.stderr.write(
+      `[ezstat-mcp] warning: ${err.message} Starting anyway — tools are listable, but tool calls will fail until it is set.\n`,
+    );
+    client = makeUnconfiguredClient(err);
   }
 
-  const client = new EzStatClient(config);
   const server = buildServer({ client });
   const transport = new StdioServerTransport();
 
