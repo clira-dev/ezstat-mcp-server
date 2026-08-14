@@ -67,8 +67,19 @@ keep rendering the history you already have. Nothing looks broken.
 
 **Writing new code instead of reusing a StatHat client?** Send `X-EzStat-Strict: 1` on
 `/ez` and every rejection comes back with a real HTTP status (401 bad key, 429 quota, 400
-malformed), so ordinary error handling is enough. That is the recommended default for
-anything new. Full contract: [ezstat.dev/docs#wire-responses](https://ezstat.dev/docs#wire-responses).
+malformed), so ordinary error handling is enough. Full contract:
+[ezstat.dev/docs#wire-responses](https://ezstat.dev/docs#wire-responses).
+
+**Better still: use the v1 write endpoints.** The 200-with-the-verdict-in-the-body
+behaviour is confined to `/ez`, `/c` and `/v` — they exist so unmodified StatHat clients
+keep working. `POST /api/v1/stats/{name}/count` and `/value` (with `Authorization: Bearer`)
+return standard HTTP status codes on every rejection — 401 unauthorized, 403 stat or
+daily-point limit reached, 429 rate limited, 400 malformed input, 5xx server-side — with no
+header and no opt-in. That matters beyond your own code: uptime checks, CDN and proxy logs,
+API gateways and SLO tooling classify by status and never open a body, so a real status is
+the only thing that stops a mistyped key from looking like success across your whole
+observability chain. Nothing is deprecated — the compat endpoints stay — but when you next
+touch the writer, this is where to move it.
 
 This server does the check for you: `src/ezstat-client.ts` treats a `{"status":"error"}`
 body as a failure regardless of the HTTP code, so `track_metric` reports a dropped point as
