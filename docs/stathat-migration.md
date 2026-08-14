@@ -38,6 +38,59 @@ Counters (`count=N`) and value/gauge stats (`value=X`) both work; stats auto-cre
 first POST, so there is nothing to pre-register. You can backfill historical points by
 passing a unix `t` timestamp on ingest.
 
+## Check the response BODY, not the status code
+
+This is the one place drop-in compatibility can bite you, so do it on the first write of
+the migration rather than after.
+
+Because `/ez`, `/c` and `/v` mirror StatHat's original wire behaviour, a **rejected** write
+— a stale key, the wrong key, a quota you have hit — still comes back **HTTP 200**. The
+verdict is in the body:
+
+```bash
+# The HTTP code is 200 either way. The BODY is the verdict.
+curl -s -X POST https://api.ezstat.dev/ez \
+  -d "ezkey=YOUR_EZSTAT_KEY" -d "stat=signups" -d "count=1"
+
+# → {"status":200,"msg":"ok"}                   recorded
+# → {"status":"error","msg":"invalid ezkey"}    NOT recorded — and still HTTP 200
+
+# Make it fail loudly in a script:
+curl -s -X POST https://api.ezstat.dev/ez \
+  -d "ezkey=YOUR_EZSTAT_KEY" -d "stat=signups" -d "count=1" \
+  | jq -e '.status == 200' >/dev/null || { echo "EzStat DROPPED the point"; exit 1; }
+```
+
+StatHat behaved this way and its official client libraries do not read the body, so a
+client you did not modify reports those rejections to you as successes — while your charts
+keep rendering the history you already have. Nothing looks broken.
+
+**Writing new code instead of reusing a StatHat client?** Send `X-EzStat-Strict: 1` on
+`/ez` and every rejection comes back with a real HTTP status (401 bad key, 429 quota, 400
+malformed), so ordinary error handling is enough. That is the recommended default for
+anything new. Full contract: [ezstat.dev/docs#wire-responses](https://ezstat.dev/docs#wire-responses).
+
+This server does the check for you: `src/ezstat-client.ts` treats a `{"status":"error"}`
+body as a failure regardless of the HTTP code, so `track_metric` reports a dropped point as
+an error rather than a success.
+
+## Confirm the points are arriving — not just accepted
+
+A 200 tells you the request reached EzStat, not that a point was stored under your account.
+After switching a real writer over, prove the round trip:
+
+```bash
+curl -fsSL https://ezstat.dev/tools/ezstat-verify.py -o ezstat-verify.py
+python3 ezstat-verify.py --key YOUR_EZSTAT_KEY
+```
+
+One Python file, standard library only, no `pip install` — read it before you run it. It
+writes a known sequence to a single stat, reads it back through the CSV export and the API,
+and exits non-zero if the numbers disagree. Exit `0` = every surface reconciles; exit `1` =
+they disagree; exit `2` = the run could not complete (no key, network, a 401) and is
+deliberately not reported as disagreement. What it proves and what it does not:
+[ezstat.dev/docs#verify](https://ezstat.dev/docs#verify).
+
 ## Importing your StatHat history
 
 If you saved your StatHat CSV or JSON export before it closed, upload it to the importer

@@ -139,6 +139,17 @@ curl -X POST https://api.stathat.com/ez -d "stat=messages sent" -d "ezkey=KEY" -
 curl -X POST https://api.ezstat.dev/ez -d "stat=messages sent" -d "ezkey=EZSTAT_KEY" -d "count=1"
 ```
 
+**One gotcha, and it is the important one: check the response BODY, not the status code.**
+Because the wire format is StatHat's, a *rejected* write (stale key, wrong key, quota hit)
+still returns **HTTP 200**, with the verdict in the body — `{"status":200,"msg":"ok"}` means
+recorded, `{"status":"error","msg":"..."}` means it was not. An unmodified StatHat client
+reports those as successes while your charts keep rendering old data, so nothing looks
+broken. New code should send `X-EzStat-Strict: 1` on `/ez` and get real HTTP status codes
+instead. (This server already does the right thing: it treats an `error` body as a failure
+regardless of the HTTP code.) After switching, confirm points are *arriving* with
+[ezstat.dev/tools/ezstat-verify.py](https://ezstat.dev/tools/ezstat-verify.py) — documented
+at [ezstat.dev/docs#verify](https://ezstat.dev/docs#verify).
+
 Most StatHat client libraries take a base-URL override in one line. Saved a StatHat
 CSV/JSON export? The importer recreates your stats and backfills history (8 MB / 500k
 points per file). Full guide: [docs/stathat-migration.md](docs/stathat-migration.md) ·
