@@ -179,7 +179,7 @@ describe("read_stat", () => {
     expect(req?.headers["Authorization"]).toBe("Bearer test-ezkey");
   });
 
-  it("forwards from/to as Unix-seconds query params when provided", async () => {
+  it("converts Unix-seconds `from`/`to` to ISO 8601 before sending (the API parses with Date.parse)", async () => {
     mock.configure({
       json: {
         name: "x",
@@ -188,9 +188,34 @@ describe("read_stat", () => {
         summary: { count: 0, min: null, max: null, avg: null, sum: null, truncated: false },
       },
     });
-    await callTool("read_stat", { name: "x", from: 1_700_000_000, to: 1_700_100_000 });
-    expect(mock.lastRequest()?.url).toContain("from=1700000000");
-    expect(mock.lastRequest()?.url).toContain("to=1700100000");
+    const fromSec = 1_700_000_000;
+    const toSec = 1_700_100_000;
+    await callTool("read_stat", { name: "x", from: fromSec, to: toSec });
+    const url = mock.lastRequest()?.url ?? "";
+    const decoded = decodeURIComponent(url);
+    expect(decoded).toContain(`from=${new Date(fromSec * 1000).toISOString()}`);
+    expect(decoded).toContain(`to=${new Date(toSec * 1000).toISOString()}`);
+    expect(decoded).not.toContain("from=1700000000&");
+    expect(decoded).not.toContain("to=1700100000&");
+  });
+
+  it("does not advertise or send a `resolution` parameter (API derives bucket width from span)", async () => {
+    mock.configure({
+      json: {
+        name: "x",
+        type: "value",
+        data: [],
+        summary: { count: 0, min: null, max: null, avg: null, sum: null, truncated: false },
+      },
+    });
+    const result = await client.listTools();
+    const readStat = result.tools.find((t) => t.name === "read_stat");
+    expect(readStat, "read_stat tool should exist").toBeDefined();
+    const schema = readStat!.inputSchema as { properties?: Record<string, unknown> };
+    expect(Object.keys(schema.properties ?? {})).not.toContain("resolution");
+    await callTool("read_stat", { name: "x", from: 1_700_000_000, to: 1_700_100_000, resolution: "hour" });
+    const url = mock.lastRequest()?.url ?? "";
+    expect(url).not.toMatch(/[?&]resolution=/);
   });
 
   it("returns a friendly tool error on a 404", async () => {
@@ -241,6 +266,75 @@ describe("list_stats", () => {
     const res = await callTool("list_stats", {});
     expect(res.isError).toBeFalsy();
     expect(res.content[0]?.text).toContain("No stats found");
+  });
+});
+
+describe("create_alert", () => {
+  it("looks up the stat, then sends `stat_name` (not `stat_id`) to the API — the .strict() schema only accepts stat_name", async () => {
+    mock.queue({ json: { stats: [{ id: "s1", name: "page_views", type: "counter", description: null }] } });
+    mock.queue({ json: { alert: { id: "al_1", stat_name: "page_views" } } });
+    const res = await callTool("create_alert", {
+      stat: "page_views",
+      condition_type: "above",
+      threshold: 100,
+      webhook_url: "https://example.test/hook",
+    });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0]?.text).toContain("Alert created (id al_1)");
+
+    const createReq = mock.record().find((r) => r.url.includes("/api/v1/alerts"));
+    expect(createReq?.url).toBe("https://api.ezstat.dev/api/v1/alerts");
+    expect(createReq?.method).toBe("POST");
+    const body = JSON.parse(createReq?.body ?? "{}");
+    expect(body.stat_name).toBe("page_views");
+    expect(body.stat_id).toBeUndefined();
+    expect(body.condition_type).toBe("above");
+    expect(body.threshold).toBe(100);
+    expect(body.channel).toBe("webhook");
+    expect(body.channel_config).toEqual({ webhook_url: "https://example.test/hook" });
+  });
+
+  it("forwards `consecutive_required` so the `sustained` condition is not silently degraded to `above`", async () => {
+    mock.queue({ json: { stats: [{ id: "s1", name: "signups", type: "counter", description: null }] } });
+    mock.queue({ json: { alert: { id: "al_2", stat_name: "signups" } } });
+    const res = await callTool("create_alert", {
+      stat: "signups",
+      condition_type: "sustained",
+      threshold: 50,
+      webhook_url: "https://example.test/hook",
+      consecutive_required: 3,
+    });
+    expect(res.isError).toBeFalsy();
+    const body = JSON.parse(mock.lastRequest()?.body ?? "{}");
+    expect(body.condition_type).toBe("sustained");
+    expect(body.consecutive_required).toBe(3);
+  });
+
+  it("omits `consecutive_required` from the wire when the agent does not pass it (lets the API default)", async () => {
+    mock.queue({ json: { stats: [{ id: "s1", name: "latency_ms", type: "value", description: null }] } });
+    mock.queue({ json: { alert: { id: "al_3", stat_name: "latency_ms" } } });
+    await callTool("create_alert", {
+      stat: "latency_ms",
+      condition_type: "above",
+      threshold: 200,
+      webhook_url: "https://example.test/hook",
+    });
+    const body = JSON.parse(mock.lastRequest()?.body ?? "{}");
+    expect(Object.prototype.hasOwnProperty.call(body, "consecutive_required")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(body, "stat_id")).toBe(false);
+  });
+
+  it("returns a friendly tool error when the named stat does not exist (no POST to /alerts)", async () => {
+    mock.configure({ json: { stats: [] } });
+    const res = await callTool("create_alert", {
+      stat: "ghost",
+      condition_type: "above",
+      threshold: 1,
+      webhook_url: "https://example.test/hook",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.content[0]?.text).toMatch(/No stat named "ghost"/);
+    expect(mock.record().filter((r) => r.url.includes("/api/v1/alerts") && r.method === "POST")).toHaveLength(0);
   });
 });
 

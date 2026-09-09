@@ -58,6 +58,10 @@ const askSchema = {
     ),
 };
 
+// `from`/`to` are accepted as Unix-seconds (intuitive for agents) but the EzStat API expects
+// ISO 8601 (`Date.parse` rejects bare integers). The conversion happens in
+// `ezstat-client.readStat`. A `resolution` parameter is NOT exposed — the API derives bucket
+// width from the requested span, so any client-supplied value would be silently discarded.
 const readStatSchema = {
   name: z
     .string()
@@ -69,17 +73,17 @@ const readStatSchema = {
     .int()
     .positive()
     .optional()
-    .describe("Unix-seconds lower bound (inclusive). Omit for \"last 24 hours\"."),
+    .describe(
+      "Unix-seconds lower bound (inclusive). Sent to the API as ISO 8601; omit for \"last 24 hours\".",
+    ),
   to: z
     .number()
     .int()
     .positive()
     .optional()
-    .describe("Unix-seconds upper bound (inclusive). Omit for \"now\"."),
-  resolution: z
-    .enum(["minute", "hour", "day"])
-    .optional()
-    .describe("Optional rollup resolution. Omit for raw points."),
+    .describe(
+      "Unix-seconds upper bound (inclusive). Sent to the API as ISO 8601; omit for \"now\".",
+    ),
 };
 
 const listStatsSchema = {
@@ -102,10 +106,12 @@ const createAlertSchema = {
   stat: z.string().min(1).max(128).describe("Name of the stat to alert on (as shown by list_stats)."),
   condition_type: z
     .enum(["above", "below", "pct_change", "heartbeat", "missing_data", "sustained"])
-    .describe("above/below: value crosses threshold. pct_change: % move over window_minutes. heartbeat/missing_data: no data for window_minutes. sustained: above threshold for consecutive evaluations."),
+    .describe("above/below: value crosses threshold. pct_change: % move over window_minutes. heartbeat/missing_data: no data for window_minutes. sustained: value stays above threshold for N consecutive evaluations (N=consecutive_required)."),
   threshold: z.number().finite().describe("The boundary value (for heartbeat/missing_data use 0)."),
   window_minutes: z.number().int().positive().max(10080).optional()
     .describe("Staleness window for heartbeat/missing_data, lookback for pct_change (minutes)."),
+  consecutive_required: z.number().int().min(1).max(20).optional()
+    .describe("For `sustained`: number of consecutive evaluations the condition must hold before the alert fires. Omit (default 1) to fire on the first evaluation — equivalent to `above`."),
   webhook_url: z.string().url().max(500)
     .describe("Public HTTPS receiver for the alert payload (private/internal targets are refused). Email delivery is coming soon — webhook/Slack only for now."),
   cooldown_minutes: z.number().int().positive().max(10080).optional()
@@ -200,7 +206,6 @@ export function buildServer(deps: BuildServerDeps): McpServer {
           name: args.name,
           from: args.from,
           to: args.to,
-          resolution: args.resolution,
         });
         const lines: string[] = [];
         lines.push(`Stat: ${result.name}${result.type ? ` (${result.type})` : ""}`);
@@ -265,21 +270,27 @@ export function buildServer(deps: BuildServerDeps): McpServer {
       try {
         const stats = await client.listStats();
         const match = stats.find((st) => st.name === args.stat);
-        if (!match || !match.id) {
+        if (!match) {
           return errorResult(
             new Error(`No stat named "${args.stat}" in this account. Use list_stats to see what exists.`),
             "Unknown stat",
           );
         }
-        const alert = await client.createAlert({
-          stat_id: match.id,
+        // The API's create-alert body takes `stat_name` (not `stat_id`) and accepts
+        // `consecutive_required` for the `sustained` condition. The schema is `.strict()`,
+        // so extra top-level keys are 400s and the per-field defaults apply only when the
+        // optional field is OMITTED (not sent as `null`).
+        const body: Parameters<EzStatClient["createAlert"]>[0] = {
+          stat_name: args.stat,
           condition_type: args.condition_type,
           threshold: args.threshold,
-          window_minutes: args.window_minutes,
           channel: "webhook",
           channel_config: { webhook_url: args.webhook_url },
-          cooldown_minutes: args.cooldown_minutes,
-        });
+        };
+        if (args.window_minutes !== undefined) body.window_minutes = args.window_minutes;
+        if (args.consecutive_required !== undefined) body.consecutive_required = args.consecutive_required;
+        if (args.cooldown_minutes !== undefined) body.cooldown_minutes = args.cooldown_minutes;
+        const alert = await client.createAlert(body);
         return okResult(
           `Alert created (id ${alert.id}): "${args.stat}" ${args.condition_type} ${args.threshold} -> webhook. It is evaluated about every 2 minutes.`,
         );

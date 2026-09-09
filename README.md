@@ -195,8 +195,9 @@ The tools map to real EzStat API routes (all auth by EzStat API key):
   Counter semantics: omit both `count` and `value` to record `count=1` (counter +1).
 - `ask_ezstat` calls Ask-Your-Data (`{"query":"..."}` → `{answer, data, intent, ...}`).
   This is the agent read path — count it as an agent read for usage tracking.
-- `read_stat` returns the stat's recent series + summary; pass `from`/`to` (Unix seconds) to
-  bound the window. `resolution` rolls up to `minute`/`hour`/`day`.
+- `read_stat` returns the stat's recent series + summary; pass `from`/`to` (Unix seconds,
+  converted to ISO 8601 at the HTTP boundary) to bound the window. The bucket width is
+  auto-derived from the requested span (≤6h → minute, ≤7d → hour, >7d → day).
 - `list_stats` returns the account's stats; pass `type` to filter to `counter` or `value`.
 
 ## Build & run locally

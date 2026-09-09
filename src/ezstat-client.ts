@@ -162,7 +162,13 @@ export class EzStatClient {
 
   /**
    * Read a single stat (latest value / series / summary) for an optional time range.
-   * `from`/`to` are Unix seconds (StatHat-style) — when omitted, the server defaults to last 24h.
+   * `from`/`to` are Unix seconds (StatHat-style) at the MCP boundary — they are converted
+   * to ISO 8601 here because the API parses them with `Date.parse`, which rejects bare
+   * integers. When omitted, the server defaults the lower bound to `now - 24h`.
+   *
+   * Rollup granularity is NOT a request parameter: the API derives bucket width from the
+   * requested span (`≤6h→minute`, `≤7d→hour`, `>7d→day`). We deliberately do not pass
+   * `resolution` through.
    */
   async readStat(input: ReadStatInput): Promise<ReadStatResult> {
     if (!input.name || !input.name.trim()) {
@@ -174,9 +180,8 @@ export class EzStatClient {
     }
     const encoded = encodeURIComponent(input.name);
     const qs = this.encodeQuery({
-      from: input.from,
-      to: input.to,
-      resolution: input.resolution,
+      from: input.from === undefined ? undefined : unixSecondsToIso(input.from),
+      to: input.to === undefined ? undefined : unixSecondsToIso(input.to),
     });
     const path = `/api/v1/stats/${encoded}${qs ? `?${qs}` : ""}`;
     const raw = await this.getJson<unknown>(path, { bearer: true });
@@ -402,8 +407,6 @@ export interface ReadStatInput {
   from?: number;
   /** Unix seconds, inclusive. */
   to?: number;
-  /** Optional rollup resolution: minute | hour | day. */
-  resolution?: "minute" | "hour" | "day";
 }
 
 export interface DataPoint {
@@ -484,6 +487,18 @@ function parseServerErrorMessage(text: string): string | null {
   }
 }
 
+/** Convert Unix-seconds to ISO 8601 (`Date.parse`-compatible on the server side). */
+function unixSecondsToIso(unixSeconds: number): string {
+  if (!Number.isFinite(unixSeconds) || unixSeconds < 0) {
+    throw new EzStatApiError({
+      status: 0,
+      code: "invalid_input",
+      message: `read_stat time bounds must be a positive Unix-seconds integer (got ${unixSeconds}).`,
+    });
+  }
+  return new Date(unixSeconds * 1000).toISOString();
+}
+
 export interface AlertRow {
   id: string;
   stat_id?: string;
@@ -496,11 +511,12 @@ export interface AlertRow {
 }
 
 export interface CreateAlertInput {
-  stat_id: string;
+  stat_name: string;
   condition_type: string;
   threshold: number;
-  window_minutes?: number;
+  window_minutes?: number | null;
+  consecutive_required?: number | null;
   channel: string;
   channel_config?: { webhook_url?: string; slack_channel?: string };
-  cooldown_minutes?: number;
+  cooldown_minutes?: number | null;
 }

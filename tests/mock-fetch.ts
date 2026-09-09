@@ -20,11 +20,15 @@ export interface MockFetchHandle {
   configureRaw: (text: string, status?: number) => void;
   configureError: (err: Error) => void;
   configureTimeout: () => void;
+  /** Queue a response to be consumed in order. Each call dequeues one entry. */
+  queue: (opts: { json?: unknown; status?: number; statusText?: string; headers?: Record<string, string> }) => void;
   /** Reset the mock to a sensible default (200 OK with empty JSON). */
   reset: () => void;
   record: () => RecordedRequest[];
   /** The most recent request, or null if none. */
   lastRequest: () => RecordedRequest | null;
+  /** The request at index i in record() order. */
+  requestAt: (i: number) => RecordedRequest | null;
 }
 
 export function makeMockFetch(): { deps: EzStatClientDeps; mock: MockFetchHandle } {
@@ -36,8 +40,22 @@ export function makeMockFetch(): { deps: EzStatClientDeps; mock: MockFetchHandle
     headers: Record<string, string>;
     delayMs?: number;
   } = { status: 200, statusText: "OK", body: "{}", headers: {} };
+  const queuedResponses: Array<typeof nextResponse> = [];
   let throwError: Error | null = null;
   let hangForever = false;
+  function responseFromOpts(opts: { json?: unknown; status?: number; statusText?: string; headers?: Record<string, string> }): typeof nextResponse {
+    const status = opts.status ?? 200;
+    return {
+      status,
+      statusText: opts.statusText ?? (status >= 200 && status < 300 ? "OK" : "ERR"),
+      body: opts.json === undefined ? "" : JSON.stringify(opts.json),
+      headers: opts.headers ?? {},
+    };
+  }
+  function dequeueResponse(): typeof nextResponse {
+    const next = queuedResponses.shift();
+    return next ?? nextResponse;
+  }
 
   const fakeFetch: NonNullable<EzStatClientDeps["fetch"]> = async (url, init) => {
     const method = init?.method ?? "GET";
@@ -66,12 +84,13 @@ export function makeMockFetch(): { deps: EzStatClientDeps; mock: MockFetchHandle
       });
     }
 
-    const text = nextResponse.body;
+    const resp = dequeueResponse();
+    const text = resp.body;
     return {
-      ok: nextResponse.status >= 200 && nextResponse.status < 300,
-      status: nextResponse.status,
-      statusText: nextResponse.statusText,
-      headers: new Headers(nextResponse.headers),
+      ok: resp.status >= 200 && resp.status < 300,
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: new Headers(resp.headers),
       async text() {
         return text;
       },
@@ -82,13 +101,8 @@ export function makeMockFetch(): { deps: EzStatClientDeps; mock: MockFetchHandle
   };
 
   const mock: MockFetchHandle = {
-    configure({ json, status = 200, statusText = "OK", headers = {} } = {}) {
-      nextResponse = {
-        status,
-        statusText,
-        body: json === undefined ? "" : JSON.stringify(json),
-        headers,
-      };
+    configure(opts = {}) {
+      nextResponse = responseFromOpts(opts);
     },
     configureRaw(text, status = 200) {
       nextResponse = { status, statusText: status === 200 ? "OK" : "ERR", body: text, headers: {} };
@@ -100,8 +114,12 @@ export function makeMockFetch(): { deps: EzStatClientDeps; mock: MockFetchHandle
       hangForever = true;
       setTimeout(() => (hangForever = false), 30_000);
     },
+    queue(opts = {}) {
+      queuedResponses.push(responseFromOpts(opts));
+    },
     reset() {
       nextResponse = { status: 200, statusText: "OK", body: "{}", headers: {} };
+      queuedResponses.length = 0;
       throwError = null;
       hangForever = false;
     },
@@ -110,6 +128,9 @@ export function makeMockFetch(): { deps: EzStatClientDeps; mock: MockFetchHandle
     },
     lastRequest() {
       return recorded.length === 0 ? null : (recorded[recorded.length - 1] ?? null);
+    },
+    requestAt(i: number) {
+      return recorded[i] ?? null;
     },
   };
 

@@ -71,7 +71,7 @@ describe("MCP server — tools list", () => {
 
     expect(props("track_metric").sort()).toEqual(["count", "stat", "timestamp", "value"].sort());
     expect(props("ask_ezstat").sort()).toEqual(["query"]);
-    expect(props("read_stat").sort()).toEqual(["from", "name", "resolution", "to"].sort());
+    expect(props("read_stat").sort()).toEqual(["from", "name", "to"].sort());
     expect(props("list_stats").sort()).toEqual(["type"]);
   });
 });
